@@ -40,6 +40,7 @@
   <div id="stage">
     <div id="layer"><div id="box"></div></div>
     <div id="hit"></div>
+    <div id="tapFx"></div>
     <div id="spinner"></div>
     <div id="osd"></div>
     <div id="msg"></div>
@@ -83,6 +84,9 @@
           <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm2.5-4h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
         </button>
       </div>
+      <select class="need" id="qualitySel" title="Video quality" aria-label="Quality">
+        <option>Quality</option>
+      </select>
       <button class="tb need" id="speedBtn" title="Playback speed (&lt; and &gt;)">1×</button>
       <button class="ib need" id="loopBtn" title="Loop whole video" aria-label="Loop" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
@@ -174,14 +178,14 @@
       <div><kbd>+</kbd> <kbd>−</kbd></div><div>Zoom in / out</div>
       <div><kbd>Shift</kbd> + arrows</div><div>Pan</div>
       <div><kbd>Z</kbd></div><div>Reset zoom and pan</div>
-      <div><kbd>F</kbd> / double-click</div><div>Fullscreen</div>
+      <div><kbd>F</kbd></div><div>Fullscreen</div>
       <div><kbd>P</kbd></div><div>Picture-in-picture (not YouTube)</div>
       <div class="sec">Advanced (when switched on)</div>
       <div><kbd>,</kbd> <kbd>.</kbd></div><div>Previous / next frame</div>
       <div><kbd>[</kbd> <kbd>]</kbd></div><div>Set A / set B</div>
       <div><kbd>\</kbd></div><div>Clear A-B</div>
     </div>
-    <p class="note">Mouse: scroll to zoom where the pointer is, drag to pan, click to play or pause. On touch: pinch and drag.</p>
+    <p class="note">On the video: double-click or double-tap the middle to play or pause, and the left or right side to go back or forward 5 s (keep tapping to skip more). Scroll or pinch to zoom, drag to pan.</p>
     <div class="dlg-actions"><button class="btn primary">Close</button></div>
   </form>
 </dialog>

@@ -13,6 +13,12 @@ const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 const FPS_LIST = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
 const ZOOM_MIN = 0.25, ZOOM_MAX = 12;
 const TYPE_LABEL = { youtube: 'YouTube', hls: 'Stream', file: 'Video', local: 'File' };
+const YT_QUALITIES = [['auto', 'Auto'], ['480', '480p'], ['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K (2160p)']];
+const YT_NAMES = { tiny: '144p', small: '240p', medium: '360p', large: '480p', hd720: '720p', hd1080: '1080p', hd1440: '1440p', hd2160: '4K', highres: '4K+' };
+function levelLabel(l, withRate) {
+  const name = l.height ? l.height + 'p' : Math.round((l.bitrate || 0) / 1000) + ' kbps';
+  return withRate && l.height && l.bitrate ? name + ' · ' + (l.bitrate / 1e6).toFixed(1) + ' Mbps' : name;
+}
 
 /* ---------------- helpers ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -179,16 +185,28 @@ class Html5Adapter extends Adapter {
   }
   async load() {
     const { url, type } = this.src;
-    if (type === 'hls' && !this.v.canPlayType('application/vnd.apple.mpegurl')) {
-      await loadScript(HLS_JS).catch(() => { throw new Error('Could not load the stream player. Check your connection.'); });
+    if (type === 'hls') {
+      // Prefer hls.js even where the browser plays HLS itself: only hls.js lets us pick the quality.
+      let useHlsJs = false;
+      try {
+        if (!window.Hls) await loadScript(HLS_JS);
+        useHlsJs = !!(window.Hls && Hls.isSupported());
+      } catch { /* fall back to native playback */ }
       if (this.dead) return;
-      if (!window.Hls || !Hls.isSupported()) throw new Error('This browser can\'t play HLS streams.');
-      const hls = this.hls = new Hls({ enableWorker: true });
-      hls.on(Hls.Events.ERROR, (_, d) => {
-        if (d.fatal) this.fail('Stream error (' + (d.details || d.type) + '). The site may block its streams from playing on other sites.');
-      });
-      hls.loadSource(url);
-      hls.attachMedia(this.v);
+      if (useHlsJs) {
+        const hls = this.hls = new Hls({ enableWorker: true });
+        hls.on(Hls.Events.ERROR, (_, d) => {
+          if (d.fatal) this.fail('Stream error (' + (d.details || d.type) + '). The site may block its streams from playing on other sites.');
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => this.emit('quality'));
+        hls.on(Hls.Events.LEVEL_SWITCHED, () => this.emit('quality'));
+        hls.loadSource(url);
+        hls.attachMedia(this.v);
+      } else if (this.v.canPlayType('application/vnd.apple.mpegurl')) {
+        this.v.src = url;
+      } else {
+        throw new Error('Could not load the stream player. Check your connection.');
+      }
     } else {
       this.v.src = url;
     }
@@ -240,6 +258,22 @@ class Html5Adapter extends Adapter {
   get canPip() { return !!document.pictureInPictureEnabled && this.v.videoWidth > 0; }
   pip() { return document.pictureInPictureElement ? document.exitPictureInPicture() : this.v.requestPictureInPicture(); }
   get title() { return ''; }
+  /** Streams list their qualities; a plain file has exactly one. */
+  get qualityInfo() {
+    const hls = this.hls;
+    if (hls && hls.levels && hls.levels.length > 1) {
+      const lv = hls.levels;
+      const cur = lv[hls.currentLevel];
+      const opts = [{ value: '-1', label: 'Auto' + (hls.autoLevelEnabled && cur ? ' · ' + levelLabel(cur) : '') }];
+      lv.map((l, i) => ({ l, i }))
+        .sort((x, y) => (y.l.height - x.l.height) || (y.l.bitrate - x.l.bitrate))
+        .forEach(({ l, i }) => opts.push({ value: String(i), label: levelLabel(l, true) }));
+      return { options: opts, value: hls.autoLevelEnabled ? '-1' : String(hls.currentLevel) };
+    }
+    const h = this.v.videoHeight;
+    return { options: [{ value: 'src', label: h ? h + 'p (only quality)' : 'Single quality' }], value: 'src', fixed: true };
+  }
+  setQuality(v) { if (this.hls) this.hls.currentLevel = +v; }
   destroy() {
     this.dead = true;
     try { if (this.hls) this.hls.destroy(); } catch { /* ignore */ }
@@ -293,6 +327,7 @@ class YouTubeAdapter extends Adapter {
         onReady: () => this.markReady(),
         onStateChange: e => { this.state = e.data; this.emit('state'); if (e.data === 0) this.emit('ended'); },
         onPlaybackRateChange: () => this.emit('rate'),
+        onPlaybackQualityChange: () => this.emit('quality'),
         onError: e => this.fail(ytErrorText(e.data)),
       },
     });
@@ -332,6 +367,20 @@ class YouTubeAdapter extends Adapter {
   get natural() { return this.src.shorts ? 9 / 16 : 16 / 9; }
   get canPip() { return false; }
   get title() { try { const p = this.api; return (p && p.getVideoData && p.getVideoData().title) || ''; } catch { return ''; } }
+  /** YouTube no longer lets embeds set quality directly; it picks from the player's size.
+      So a chosen quality makes the player that big behind the scenes (see layout()). */
+  get qualityInfo() {
+    let cur = '';
+    try { cur = YT_NAMES[this.api && this.api.getPlaybackQuality()] || ''; } catch { /* ignore */ }
+    const opts = YT_QUALITIES.map(([value, label]) => ({ value, label }));
+    opts[0].label = 'Auto' + (cur ? ' · ' + cur : '');
+    if (S.ytQuality !== 'auto' && cur) {
+      const o = opts.find(x => x.value === S.ytQuality);
+      if (o) o.label += ' · now ' + cur;
+    }
+    return { options: opts, value: S.ytQuality };
+  }
+  setQuality() { layout(); }
   destroy() {
     this.dead = true;
     try { if (this.p && this.p.destroy) this.p.destroy(); } catch { /* ignore */ }
@@ -353,7 +402,7 @@ const els = {
   tCur: $('#tCur'), tDur: $('#tDur'),
   zoomOut: $('#zoomOut'), zoomIn: $('#zoomIn'), zoomVal: $('#zoomVal'),
   speedBtn: $('#speedBtn'), speedPop: $('#speedPop'), speedRange: $('#speedRange'), speedVal: $('#speedVal'), speedChips: $('#speedChips'),
-  loop: $('#loopBtn'), pip: $('#pipBtn'), help: $('#helpBtn'), fs: $('#fsBtn'),
+  quality: $('#qualitySel'), loop: $('#loopBtn'), pip: $('#pipBtn'), help: $('#helpBtn'), fs: $('#fsBtn'),
   fBack: $('#fBack'), fFwd: $('#fFwd'), frameNo: $('#frameNo'), fps: $('#fpsSel'),
   aBtn: $('#aBtn'), bBtn: $('#bBtn'), abLoop: $('#abLoopBtn'), abClear: $('#abClear'),
   aspect: $('#aspectSel'), aspectCustom: $('#aspectCustom'),
@@ -367,6 +416,7 @@ const S = {
   aspect: store.get('aspect', 'original'),
   customAspect: store.get('customAspect', '1.85:1'),
   fpsChoice: String(store.get('fps', 'auto')),
+  ytQuality: String(store.get('ytQuality', 'auto')),
   a: null, b: null, abLoop: true,
   rate: 1, volume: clamp(+store.get('volume', 1) || 0, 0, 1), muted: !!store.get('muted', false), loop: false,
   scrub: null,
@@ -386,6 +436,7 @@ function showEmpty() {
   li('Drop', 'a video file anywhere on this window, or click Open file');
   li('Bookmarklet', 'to send the video from any page you\'re on');
   c.append(ul);
+  c.append(el('p', 'note', 'Turn on Advanced (top right) for A-B loop, frame-by-frame and aspect ratio.'));
   showMsg(c);
 }
 function showError(text, actions = []) {
@@ -444,6 +495,7 @@ function teardown() {
   document.body.classList.remove('has-media', 'playing');
   els.stage.classList.remove('buffering');
   setTitle('');
+  updateQualityUI();
 }
 
 /** Load a source. Resolves true when it's playing, false on failure. `quiet` = probe, no error card. */
@@ -487,7 +539,7 @@ async function load(src, { quiet = false } = {}) {
   setRate(clamp(S.rate, ad.minRate, ad.maxRate), true);
   setTitle(ad.title || src.title || (src.type === 'local' ? src.label : shortUrl(src.label)));
   els.pip.hidden = !ad.canPip;
-  layout(); updateABUI(); updateFpsUI(); updateSpeedUI();
+  layout(); updateABUI(); updateFpsUI(); updateSpeedUI(); updateQualityUI();
   ad.play();
   return true;
 }
@@ -563,6 +615,9 @@ function onAdapter(ev, data) {
     case 'fps':
       updateFpsUI();
       break;
+    case 'quality':
+      updateQualityUI();
+      break;
     case 'error':
       if (ad.ready) showError(data);
       break;
@@ -585,6 +640,35 @@ function tick() {
   if (S.advanced) els.frameNo.textContent = 'Frame ' + Math.floor(t * fps() + 1e-3);
   document.body.classList.toggle('playing', !ad.paused);
   els.stage.classList.toggle('buffering', ad.waiting);
+  const now = performance.now();
+  if (now - lastQualityCheck > 1000) { lastQualityCheck = now; updateQualityUI(); }
+}
+let lastQualityCheck = 0;
+
+/* ---------------- quality ---------------- */
+let lastQualityKey = '';
+function updateQualityUI() {
+  const ad = S.adapter;
+  const info = ad && ad.ready ? ad.qualityInfo : { options: [{ value: '', label: 'Quality' }], value: '' };
+  const key = JSON.stringify(info);
+  if (key === lastQualityKey) return;
+  lastQualityKey = key;
+  els.quality.replaceChildren(...info.options.map(o => { const op = el('option', null, o.label); op.value = o.value; return op; }));
+  els.quality.value = info.value;
+  els.quality.disabled = !!info.fixed;
+  els.quality.title = ad && ad.kind === 'youtube'
+    ? 'YouTube picks the quality from the player size. Choosing one here gives it a bigger player behind the scenes. It can still go lower on a slow connection.'
+    : info.fixed ? 'This video has only one quality' : 'Stream quality';
+}
+function setQuality(v) {
+  const ad = S.adapter;
+  if (!ad || !ad.ready) return;
+  if (ad.kind === 'youtube') { S.ytQuality = v; store.set('ytQuality', v); }
+  ad.setQuality(v);
+  const opt = [...els.quality.options].find(o => o.value === v);
+  osd('Quality ' + (opt ? opt.textContent.split(' · ')[0] : v));
+  lastQualityKey = '';
+  setTimeout(updateQualityUI, 300);
 }
 
 /* ---------------- playback ---------------- */
@@ -682,9 +766,18 @@ function layout() {
   if ((W / H > D) !== cover) { h = H; w = H * D; } else { w = W; h = W / D; }
   S.box = { w, h, W, H };
   const mw = h * A;
-  els.box.style.width = mw + 'px';
-  els.box.style.height = h + 'px';
-  els.box.style.transform = `translate(-50%, -50%) scale(${w / mw}, 1)`;
+  // For a chosen YouTube quality, lay the player out at that size and scale it down to fit:
+  // YouTube picks its quality from the player's real size, not from how big it looks.
+  let lw = mw, lh = h;
+  if (ad && ad.kind === 'youtube' && S.ytQuality !== 'auto') {
+    const want = +S.ytQuality / (window.devicePixelRatio || 1); // short side, in CSS px
+    if (A >= 1 && want > lh) { lh = want; lw = want * A; }
+    if (A < 1 && want > lw) { lw = want; lh = want / A; }
+  }
+  const s = h / lh;
+  els.box.style.width = lw + 'px';
+  els.box.style.height = lh + 'px';
+  els.box.style.transform = `translate(-50%, -50%) scale(${(w / mw) * s}, ${s})`;
   clampPan();
   applyView();
 }
@@ -769,7 +862,7 @@ els.hit.addEventListener('pointermove', e => {
 function endPointer(e) {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId);
-  if (gesture && gesture.kind === 'tap' && e.type === 'pointerup' && ptrs.size === 0) togglePlay();
+  if (gesture && gesture.kind === 'tap' && e.type === 'pointerup' && ptrs.size === 0) handleTap(e.clientX);
   if (ptrs.size === 0) { gesture = null; els.stage.classList.remove('dragging'); }
   else if (ptrs.size === 1) {
     const [p] = [...ptrs.values()];
@@ -778,7 +871,41 @@ function endPointer(e) {
 }
 els.hit.addEventListener('pointerup', endPointer);
 els.hit.addEventListener('pointercancel', endPointer);
-els.hit.addEventListener('dblclick', toggleFs);
+
+// Double-tap: middle = play/pause, left/right third = back/forward 5 s.
+// Keep tapping a side after a double-tap to skip another 5 s each tap.
+let lastTap = null;
+function tapZone(x) {
+  const r = els.stage.getBoundingClientRect();
+  const f = (x - r.left) / r.width;
+  return f < 0.3 ? -1 : f > 0.7 ? 1 : 0;
+}
+function handleTap(x) {
+  const now = performance.now(), zone = tapZone(x);
+  const prev = lastTap;
+  if (prev && prev.zone === zone && now - prev.t < (prev.streak ? 700 : 350)) {
+    if (zone === 0) {
+      const wasPaused = !S.adapter || S.adapter.paused;
+      togglePlay();
+      osd(wasPaused ? 'Play' : 'Pause');
+      lastTap = null;
+      return;
+    }
+    seekBy(5 * zone);
+    tapFlash(zone);
+    lastTap = { t: now, zone, streak: true };
+    return;
+  }
+  lastTap = { t: now, zone, streak: false };
+}
+let flashTimer;
+function tapFlash(zone) {
+  const fx = $('#tapFx');
+  fx.className = zone < 0 ? 'left show' : 'right show';
+  fx.textContent = zone < 0 ? '« 5 s' : '5 s »';
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => fx.classList.remove('show'), 450);
+}
 
 /* ---------------- seek bar & A-B markers ---------------- */
 function timeAt(clientX) {
@@ -1049,6 +1176,7 @@ els.zoomIn.addEventListener('click', () => zoomAt(S.zoom * 1.25));
 els.zoomOut.addEventListener('click', () => zoomAt(S.zoom / 1.25));
 els.zoomVal.addEventListener('click', resetView);
 els.loop.addEventListener('click', toggleLoop);
+els.quality.addEventListener('change', () => { setQuality(els.quality.value); els.quality.blur(); });
 els.pip.addEventListener('click', togglePip);
 els.help.addEventListener('click', () => els.helpDlg.showModal());
 els.fs.addEventListener('click', toggleFs);
@@ -1116,6 +1244,7 @@ if (els.fps.value !== S.fpsChoice) S.fpsChoice = els.fps.value = 'auto';
 setAdvanced(S.advanced, true);
 applyVolume();
 updateSpeedUI();
+updateQualityUI();
 showEmpty();
 new ResizeObserver(layout).observe(els.stage);
 requestAnimationFrame(tick);

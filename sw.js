@@ -3,7 +3,7 @@
    - hls.js from the CDN: cache first (the URL includes its version, so it never changes).
    - Everything else (videos, YouTube) goes straight to the network, untouched. */
 
-const VERSION = 'frame-v1';
+const VERSION = 'frame-v2';
 const SHELL = [
   './',
   './index.html',

@@ -20,7 +20,13 @@ You can also paste a link anywhere on the page (outside the text box), or open `
 
 ## Features
 
-**Basic:** play/pause, ±5 s / ±10 s skip, seek bar with hover time, volume and mute, speed from 0.1× to 4× (YouTube allows 0.25× to 2×), loop, picture-in-picture (not available for YouTube), fullscreen with controls that hide on their own, **zoom** (scroll wheel, pinch, buttons or keys) and **pan** (drag, Shift+arrows).
+**Basic:** play/pause, ±5 s / ±10 s skip, seek bar with hover time, volume and mute, speed from 0.1× to 4× (YouTube allows 0.25× to 2×), **quality** (stream qualities for .m3u8; 480p to 4K for YouTube), loop, picture-in-picture (not available for YouTube), fullscreen with controls that hide on their own, **zoom** (scroll wheel, pinch, buttons or keys) and **pan** (drag, Shift+arrows).
+
+**Taps on the video:** double-tap (or double-click) the middle to play/pause. Double-tap the left or right third to go back or forward 5 s, and keep tapping to skip more.
+
+**App (PWA):** installable from the **Install** button or the browser menu. It works offline and opens video files from your computer ("Open with Frame"). On Android the installed app also appears in the share sheet, so you can share a YouTube link straight to it.
+
+YouTube no longer lets embedded players set quality directly; it picks quality from the player's size. Choosing a quality makes the player that big behind the scenes, so YouTube streams that quality. YouTube can still go lower on a slow connection.
 
 **Advanced** (turned on and off with the switch in the top bar; the setting is remembered):
 - **A-B loop:** set A and B, drag the markers on the seek bar, toggle repeat, clear.
