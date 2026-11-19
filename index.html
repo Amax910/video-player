@@ -9,6 +9,13 @@
 <meta name="color-scheme" content="dark">
 <title>Frame Player</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2314171c'/%3E%3Cpath d='M9 7v10l8-5z' fill='%234cc2ff'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14171c">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Frame">
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="no-media">
@@ -23,6 +30,7 @@
   <button class="btn" id="fileBtn" type="button">Open file</button>
   <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.m4v" hidden>
   <button class="btn ghost" id="bmBtn" type="button" title="Send videos from any webpage to this player">Bookmarklet</button>
+  <button class="btn ghost" id="installBtn" type="button" title="Install Frame as an app" hidden>Install</button>
   <label class="switch" title="Show A-B loop, frame-by-frame and aspect controls">
     <input type="checkbox" id="advToggle"><span class="knob"></span><span>Advanced</span>
   </label>

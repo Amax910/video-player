@@ -1119,5 +1119,47 @@ updateSpeedUI();
 showEmpty();
 new ResizeObserver(layout).observe(els.stage);
 requestAnimationFrame(tick);
-readHash();
+if (!readLaunchParams()) readHash();
 window.addEventListener('hashchange', readHash);
+
+/* ---------------- PWA: install, share-to-app, open-with-app, offline ---------------- */
+// Links shared to the installed app (Android share sheet) or opened as ?src=… arrive as query params.
+// Shared text often wraps the link in other words, so pick out the first http(s) link.
+function readLaunchParams() {
+  const q = new URLSearchParams(location.search);
+  if (![...q.keys()].length) return false;
+  const text = ['src', 'url', 'text', 'title'].map(k => q.get(k) || '').join(' ');
+  const m = text.match(/https?:\/\/[^\s"'<>]+/);
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (!m) return false;
+  els.url.value = m[0];
+  openUrl(m[0]);
+  return true;
+}
+
+// "Open with Frame" on desktop when the app is installed.
+if ('launchQueue' in window) {
+  window.launchQueue.setConsumer(async params => {
+    if (params.files && params.files.length) openLocal(await params.files[0].getFile());
+  });
+}
+
+let installEvent = null;
+const installBtn = $('#installBtn');
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installEvent = e;
+  installBtn.hidden = false;
+});
+installBtn.addEventListener('click', async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  await installEvent.userChoice.catch(() => {});
+  installEvent = null;
+  installBtn.hidden = true;
+});
+window.addEventListener('appinstalled', () => { installBtn.hidden = true; osd('Installed'); });
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });
+}
