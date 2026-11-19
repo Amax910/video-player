@@ -649,7 +649,7 @@ let lastQualityCheck = 0;
 let lastQualityKey = '';
 function updateQualityUI() {
   const ad = S.adapter;
-  const info = ad && ad.ready ? ad.qualityInfo : { options: [{ value: '', label: 'Quality' }], value: '' };
+  const info = ad && ad.ready ? ad.qualityInfo : { options: [{ value: '', label: 'Auto' }], value: '' };
   const key = JSON.stringify(info);
   if (key === lastQualityKey) return;
   lastQualityKey = key;

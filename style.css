@@ -168,7 +168,8 @@ body.drop #stage::after {
 .vol { width: 84px; accent-color: var(--accent); }
 .zoom { display: flex; align-items: center; gap: 2px; margin-right: 6px; }
 #speedBtn { min-width: 52px; margin-right: 2px; }
-#qualitySel { margin-right: 6px; max-width: 170px; }
+.qwrap { display: flex; align-items: center; gap: 2px; margin-right: 6px; cursor: pointer; }
+#qualitySel { max-width: 170px; }
 .mono { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; padding: 0 6px; white-space: nowrap; min-width: 86px; }
 select, .small-in {
   background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; height: 30px; padding: 0 6px; outline: none;
